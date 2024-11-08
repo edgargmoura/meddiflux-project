@@ -47,27 +47,50 @@ phases:
       - docker push $REPOSITORY_URI:latest
       - docker push $REPOSITORY_URI:$IMAGE_TAG
       - echo "Gerando artefatos para o Elastic Beanstalk..."
-      - printf '[{"name":"meddiflux","imageUri":"%s"}]' "$REPOSITORY_URI:$IMAGE_TAG" > imagedefinitions.json
-      # Criando a estrutura de arquivos para o EB
-      - mkdir -p .ebextensions
-      - echo "Preparando arquivos para deployment..."
+      # Criando o Dockerrun.aws.json
       - |
-        cat > Dockerrun.aws.json << 'EOF'
+        cat > Dockerrun.aws.json << EOF
         {
           "AWSEBDockerrunVersion": "3",
-          "Image": {
-            "Name": "${REPOSITORY_URI}:${IMAGE_TAG}",
-            "Update": "true"
-          },
-          "Ports": [
+          "containerDefinitions": [
             {
-              "ContainerPort": 3000,
-              "HostPort": 80
+              "name": "bia",
+              "image": "${REPOSITORY_URI}:${IMAGE_TAG}",
+              "essential": true,
+              "memory": 512,
+              "portMappings": [
+                {
+                  "hostPort": 80,
+                  "containerPort": 3000
+                }
+              ]
             }
           ]
         }
         EOF
-      - zip -r deployment.zip Dockerrun.aws.json docker-compose.yml .ebextensions/
+      - echo "Preparando arquivos para deployment..."
+      - mkdir -p .ebextensions
+      - |
+        cat > .ebextensions/logging.config << EOF
+        files:
+          "/opt/elasticbeanstalk/tasks/bundlelogs.d/01-sample-app.conf":
+            mode: "000755"
+            owner: root
+            group: root
+            content: |
+              /var/log/containers/*
+        
+          "/opt/elasticbeanstalk/tasks/taillogs.d/01-sample-app.conf":
+            mode: "000755"
+            owner: root
+            group: root
+            content: |
+              /var/log/containers/*
+        EOF
+      - echo "Gerando imagedefinitions.json..."
+      - printf '[{"name":"bia","imageUri":"%s"}]' "$REPOSITORY_URI:$IMAGE_TAG" > imagedefinitions.json
+      - echo "Compactando arquivos para deployment..."
+      - zip -r deployment.zip docker-compose.yml Dockerrun.aws.json .ebextensions/
 
 artifacts:
   files:
