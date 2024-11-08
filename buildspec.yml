@@ -46,7 +46,28 @@ phases:
       - echo "Fazendo push da imagem para o ECR..."
       - docker push $REPOSITORY_URI:latest
       - docker push $REPOSITORY_URI:$IMAGE_TAG
-      - echo "Atualizando a referência da imagem no docker-compose.yml..."
+      - echo "Gerando Dockerrun.aws.json..."
+      - |
+        cat > Dockerrun.aws.json << EOF
+        {
+          "AWSEBDockerrunVersion": "3",
+          "containerDefinitions": [
+            {
+              "name": "bia",
+              "image": "${REPOSITORY_URI}:${IMAGE_TAG}",
+              "essential": true,
+              "memory": 512,
+              "portMappings": [
+                {
+                  "hostPort": 80,
+                  "containerPort": 8080
+                }
+              ]
+            }
+          ]
+        }
+        EOF
+      - echo "Atualizando docker-compose.yml..."
       - |
         cat > docker-compose.yml << EOF
         version: '3'
@@ -54,14 +75,15 @@ phases:
           bia:
             image: ${REPOSITORY_URI}:${IMAGE_TAG}
             ports:
-              - "80:3000"
+              - "80:8080"
         EOF
-      - echo "Verificando conteúdo do docker-compose.yml..."
+      - echo "Verificando conteúdo dos arquivos..."
+      - echo "docker-compose.yml:"
       - cat docker-compose.yml
-      - echo "Compactando docker-compose.yml..."
-      - zip -r deployment.zip docker-compose.yml
-      - echo "Verificando conteúdo do zip..."
-      - unzip -l deployment.zip
+      - echo "Dockerrun.aws.json:"
+      - cat Dockerrun.aws.json
+      - echo "Compactando arquivos para deployment..."
+      - zip -r deployment.zip docker-compose.yml Dockerrun.aws.json
 
 artifacts:
   files:
